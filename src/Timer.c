@@ -24,7 +24,7 @@ static unsigned int elapsed_ms;
 static time_t last_closed_s;
 static uint16_t last_closed_ms;
 
-
+// Print stopwatch time to screen in format "mm:ss dc"
 static void print_time(){
     static char text_time[] = "00:00";
     static char decis_time[] = "0";
@@ -43,11 +43,13 @@ static void print_time(){
     text_layer_set_text(decis_layer, decis_time);
 }
 
+// Pause timing
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
     paused = !paused;
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Paused: %s", paused?"true":"false");
 }
 
+// Reset the time to 0 and print the zeroed time to the screen.
 static void up_click_handler(ClickRecognizerRef recognizer, void *context){
     elapsed_ms = 0;
     print_time();
@@ -85,9 +87,11 @@ static void window_load(Window *window) {
 
     text_layer_set_background_color(decis_layer, GColorClear);
     text_layer_set_font(decis_layer, s_timer_font);
-    text_layer_set_text(decis_layer, "00");
+    text_layer_set_text(decis_layer, "0");
     text_layer_set_text_alignment(decis_layer, GTextAlignmentCenter);
 
+    // Print the time before the window is pushed onto the stack to avoid
+    // seeing an empty screen
     print_time();
 
     layer_add_child(window_layer, text_layer_get_layer(timer_layer));
@@ -104,16 +108,20 @@ static void window_unload(Window *window) {
 
 
 static void update_time(void *data){
+    app_timer_register(POLLING_PERIOD, update_time, NULL);
     if(!paused){
         elapsed_ms += POLLING_PERIOD;
         print_time();
     }
-    app_timer_register(POLLING_PERIOD, update_time, NULL);
 }
 
+// Return the number of milliseconds since the app was last closed.
 static unsigned int get_closed_time(){
     time_t current_time_s;
     uint16_t current_time_ms;
+
+    last_closed_s = persist_read_int(KEY_LAST_CLOSED_S);
+    last_closed_ms = persist_read_int(KEY_LAST_CLOSED_MS);
 
     time_ms(&current_time_s, &current_time_ms);
 
@@ -127,20 +135,7 @@ static unsigned int get_closed_time(){
 }
 
 static void init(void) {
-    elapsed_ms = persist_read_int(KEY_ELAPSED_TIME);
-
-    if(persist_exists(KEY_PAUSED)) paused = persist_read_bool(KEY_PAUSED);
-    else paused = true;
-
-    if(!paused){
-        last_closed_s = persist_read_int(KEY_LAST_CLOSED_S);
-        last_closed_ms = persist_read_int(KEY_LAST_CLOSED_MS);
-        elapsed_ms += get_closed_time();
-    }
-
-
-    app_timer_register(POLLING_PERIOD, update_time, NULL);
-
+    // Set up the window
     window = window_create();
     window_set_click_config_provider(window, click_config_provider);
     window_set_window_handlers(window, (WindowHandlers) {
@@ -151,6 +146,20 @@ static void init(void) {
     const bool fullscreen = true;
     const bool animated = true;
     window_set_fullscreen(window, fullscreen);
+
+    // Set up the timer, and read persistant values from memory.
+    app_timer_register(POLLING_PERIOD, update_time, NULL);
+    elapsed_ms = persist_read_int(KEY_ELAPSED_TIME);
+
+    // Ensure that paused is true on first run of app.
+    if(persist_exists(KEY_PAUSED)) paused = persist_read_bool(KEY_PAUSED);
+    else paused = true;
+
+    // If the app wasn't paused when last closed...
+    if(!paused){
+        elapsed_ms += get_closed_time();
+    }
+
     window_stack_push(window, animated);
 }
 
@@ -159,10 +168,11 @@ static void deinit(void) {
     persist_write_bool(KEY_PAUSED, paused);
 
     window_destroy(window);
+
+    // Write out time last to reduce inaccuracy.
     time_ms(&last_closed_s, &last_closed_ms);
     persist_write_int(KEY_LAST_CLOSED_S, last_closed_s);
     persist_write_int(KEY_LAST_CLOSED_MS, last_closed_ms);
-
 }
 
 int main(void) {
