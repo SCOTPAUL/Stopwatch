@@ -6,14 +6,14 @@
  */
 
 #include <pebble.h>
-#define POLLING_PERIOD 10
+#define POLLING_PERIOD 100
 
 #define KEY_ELAPSED_TIME 0
 #define KEY_PAUSED 1
 
 static Window *window;
 static TextLayer *timer_layer;
-static TextLayer *centis_layer;
+static TextLayer *decis_layer;
 static GFont s_timer_font;
 
 static bool paused;
@@ -21,20 +21,20 @@ static unsigned int elapsed_ms;
 
 static void print_time(){
     static char text_time[] = "00:00";
-    static char centis_time[] = "00";
+    static char decis_time[] = "0";
 
     int printing_time = elapsed_ms;
     int minutes = printing_time / 60000;
     printing_time -= minutes * 60000;
     int seconds = printing_time / 1000;
     printing_time -= seconds * 1000;
-    int centis = printing_time / 10;
+    int decis = printing_time / 100;
 
     snprintf(text_time, sizeof("00:00"), "%02d:%02d", minutes, seconds);
-    snprintf(centis_time, sizeof("00"), "%02d", centis);
+    snprintf(decis_time, sizeof("0"), "%d", decis);
 
     text_layer_set_text(timer_layer, text_time);
-    text_layer_set_text(centis_layer, centis_time);
+    text_layer_set_text(decis_layer, decis_time);
 }
 
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -72,26 +72,26 @@ static void window_load(Window *window) {
     text_layer_set_text_alignment(timer_layer, GTextAlignmentCenter);
 
 
-    centis_layer = text_layer_create((GRect){
+    decis_layer = text_layer_create((GRect){
         .origin = {0, 80},
         .size = {bounds.size.w, 50 }
     });
 
-    text_layer_set_background_color(centis_layer, GColorClear);
-    text_layer_set_font(centis_layer, s_timer_font);
-    text_layer_set_text(centis_layer, "00");
-    text_layer_set_text_alignment(centis_layer, GTextAlignmentCenter);
+    text_layer_set_background_color(decis_layer, GColorClear);
+    text_layer_set_font(decis_layer, s_timer_font);
+    text_layer_set_text(decis_layer, "00");
+    text_layer_set_text_alignment(decis_layer, GTextAlignmentCenter);
 
     print_time();
 
     layer_add_child(window_layer, text_layer_get_layer(timer_layer));
-    layer_add_child(window_layer, text_layer_get_layer(centis_layer));
+    layer_add_child(window_layer, text_layer_get_layer(decis_layer));
 
 }
 
 static void window_unload(Window *window) {
     text_layer_destroy(timer_layer);
-    text_layer_destroy(centis_layer);
+    text_layer_destroy(decis_layer);
 
     fonts_unload_custom_font(s_timer_font);
 }
