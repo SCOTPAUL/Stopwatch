@@ -128,13 +128,16 @@ static unsigned int get_closed_time(){
 
 static void init(void) {
     elapsed_ms = persist_read_int(KEY_ELAPSED_TIME);
-    paused = persist_read_bool(KEY_PAUSED);
+
+    if(persist_exists(KEY_PAUSED)) paused = persist_read_bool(KEY_PAUSED);
+    else paused = true;
 
     if(!paused){
         last_closed_s = persist_read_int(KEY_LAST_CLOSED_S);
         last_closed_ms = persist_read_int(KEY_LAST_CLOSED_MS);
         elapsed_ms += get_closed_time();
     }
+
 
     app_timer_register(POLLING_PERIOD, update_time, NULL);
 
