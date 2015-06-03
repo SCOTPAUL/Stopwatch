@@ -6,13 +6,14 @@
  */
 
 #include <pebble.h>
-#define POLLING_PERIOD 100
+#define POLLING_PERIOD 10
 
 #define KEY_ELAPSED_TIME 0
 #define KEY_PAUSED 1
 
 static Window *window;
 static TextLayer *timer_layer;
+static TextLayer *millis_layer;
 static GFont s_timer_font;
 
 static bool paused;
@@ -20,14 +21,20 @@ static unsigned int elapsed_ms;
 
 static void print_time(){
     static char text_time[] = "00:00";
+    static char decs_time[] = "00";
 
     int printing_time = elapsed_ms;
-    int minutes = printing_time/60000;
+    int minutes = printing_time / 60000;
     printing_time -= minutes * 60000;
-    int seconds = printing_time/1000;
+    int seconds = printing_time / 1000;
+    printing_time -= seconds * 1000;
+    int decs = printing_time / 10;
 
     snprintf(text_time, sizeof("00:00"), "%02d:%02d", minutes, seconds);
+    snprintf(decs_time, sizeof("00"), "%02d", decs);
+
     text_layer_set_text(timer_layer, text_time);
+    text_layer_set_text(millis_layer, decs_time);
 }
 
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -51,21 +58,34 @@ static void window_load(Window *window) {
     GRect bounds = layer_get_bounds(window_layer);
 
     timer_layer = text_layer_create((GRect) {
-        .origin = { 0, 60 },
-        .size = { bounds.size.w, bounds.size.h }
+        .origin = { 0, 40 },
+        .size = { bounds.size.w, 50 }
     });
 
     s_timer_font = fonts_load_custom_font(
         resource_get_handle(RESOURCE_ID_FONT_PERFECT_DOS_48)
     );
 
+    text_layer_set_background_color(timer_layer, GColorClear);
     text_layer_set_font(timer_layer, s_timer_font);
     text_layer_set_text(timer_layer, "00:00");
     text_layer_set_text_alignment(timer_layer, GTextAlignmentCenter);
 
+
+    millis_layer = text_layer_create((GRect){
+        .origin = {0, 80},
+        .size = {bounds.size.w, 50 }
+    });
+
+    text_layer_set_background_color(millis_layer, GColorClear);
+    text_layer_set_font(millis_layer, s_timer_font);
+    text_layer_set_text(millis_layer, "00");
+    text_layer_set_text_alignment(millis_layer, GTextAlignmentCenter);
+
     print_time();
 
     layer_add_child(window_layer, text_layer_get_layer(timer_layer));
+    layer_add_child(window_layer, text_layer_get_layer(millis_layer));
 
 }
 
