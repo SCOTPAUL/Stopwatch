@@ -1,5 +1,15 @@
+/*
+ * Timer.c
+ * A simple stopwatch timer.
+ *
+ * Custom font source: http://www.dafont.com/perfect-dos-vga-437.font
+ */
+
 #include <pebble.h>
 #define POLLING_PERIOD 100
+
+#define KEY_ELAPSED_TIME 0
+#define KEY_PAUSED 1
 
 static Window *window;
 static TextLayer *timer_layer;
@@ -52,11 +62,17 @@ static void window_load(Window *window) {
     text_layer_set_font(timer_layer, s_timer_font);
     text_layer_set_text(timer_layer, "00:00");
     text_layer_set_text_alignment(timer_layer, GTextAlignmentCenter);
+
+    print_time();
+
     layer_add_child(window_layer, text_layer_get_layer(timer_layer));
+
 }
 
 static void window_unload(Window *window) {
     text_layer_destroy(timer_layer);
+
+    fonts_unload_custom_font(s_timer_font);
 }
 
 
@@ -69,7 +85,9 @@ static void update_time(void *data){
 }
 
 static void init(void) {
-    paused = false;
+    elapsed_ms = persist_read_int(KEY_ELAPSED_TIME);
+    paused = persist_read_bool(KEY_PAUSED);
+
     app_timer_register(POLLING_PERIOD, update_time, NULL);
 
     window = window_create();
@@ -86,6 +104,8 @@ static void init(void) {
 }
 
 static void deinit(void) {
+    persist_write_int(KEY_ELAPSED_TIME, elapsed_ms);
+    persist_write_bool(KEY_PAUSED, paused);
     window_destroy(window);
 }
 
