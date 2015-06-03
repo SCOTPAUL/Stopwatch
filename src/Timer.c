@@ -10,6 +10,8 @@
 
 #define KEY_ELAPSED_TIME 0
 #define KEY_PAUSED 1
+#define KEY_LAST_CLOSED_S 2
+#define KEY_LAST_CLOSED_MS 3
 
 static Window *window;
 static TextLayer *timer_layer;
@@ -18,6 +20,10 @@ static GFont s_timer_font;
 
 static bool paused;
 static unsigned int elapsed_ms;
+
+static time_t last_closed_s;
+static uint16_t last_closed_ms;
+
 
 static void print_time(){
     static char text_time[] = "00:00";
@@ -39,13 +45,13 @@ static void print_time(){
 
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
     paused = !paused;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Paused: %i", paused);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Paused: %s", paused?"true":"false");
 }
 
 static void up_click_handler(ClickRecognizerRef recognizer, void *context){
     elapsed_ms = 0;
     print_time();
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Time Reset");
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Time reset");
 }
 
 static void click_config_provider(void *context) {
@@ -105,9 +111,30 @@ static void update_time(void *data){
     app_timer_register(POLLING_PERIOD, update_time, NULL);
 }
 
+static unsigned int get_closed_time(){
+    time_t current_time_s;
+    uint16_t current_time_ms;
+
+    time_ms(&current_time_s, &current_time_ms);
+
+    unsigned long current_time = (1000*current_time_s + current_time_ms);
+    unsigned long last_closed = (1000*last_closed_s + last_closed_ms);
+
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Closed for %lums", current_time - last_closed);
+
+    return current_time - last_closed;
+
+}
+
 static void init(void) {
     elapsed_ms = persist_read_int(KEY_ELAPSED_TIME);
     paused = persist_read_bool(KEY_PAUSED);
+
+    if(!paused){
+        last_closed_s = persist_read_int(KEY_LAST_CLOSED_S);
+        last_closed_ms = persist_read_int(KEY_LAST_CLOSED_MS);
+        elapsed_ms += get_closed_time();
+    }
 
     app_timer_register(POLLING_PERIOD, update_time, NULL);
 
@@ -127,7 +154,12 @@ static void init(void) {
 static void deinit(void) {
     persist_write_int(KEY_ELAPSED_TIME, elapsed_ms);
     persist_write_bool(KEY_PAUSED, paused);
+
     window_destroy(window);
+    time_ms(&last_closed_s, &last_closed_ms);
+    persist_write_int(KEY_LAST_CLOSED_S, last_closed_s);
+    persist_write_int(KEY_LAST_CLOSED_MS, last_closed_ms);
+
 }
 
 int main(void) {
