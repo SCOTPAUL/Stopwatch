@@ -1,7 +1,7 @@
 {
   "uuid": "b548a8b0-883d-49d2-b918-6838bf054235",
-  "shortName": "Timer",
-  "longName": "Timer",
+  "shortName": "Stopwatch",
+  "longName": "Stopwatch",
   "companyName": "Paul Cowie",
   "versionLabel": "1.0",
   "sdkVersion": "3",
