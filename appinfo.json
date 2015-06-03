@@ -1,0 +1,25 @@
+{
+  "uuid": "b548a8b0-883d-49d2-b918-6838bf054235",
+  "shortName": "Timer",
+  "longName": "Timer",
+  "companyName": "Paul Cowie",
+  "versionLabel": "1.0",
+  "sdkVersion": "3",
+  "targetPlatforms": ["aplite"],
+  "watchapp": {
+    "watchface": false
+  },
+  "appKeys": {
+    "dummy": 0
+  },
+  "resources": {
+    "media": [
+        {
+            "type": "font",
+            "name": "FONT_PERFECT_DOS_48",
+            "file": "fonts/perfect-dos-vga.ttf",
+            "characterRegex": "[0-9:]"
+        }
+    ]
+  }
+}
