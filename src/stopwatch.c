@@ -6,54 +6,57 @@
  */
 
 #include <pebble.h>
-#define POLLING_PERIOD 100
-
-#define KEY_ELAPSED_TIME 0
-#define KEY_PAUSED 1
-#define KEY_LAST_CLOSED_S 2
-#define KEY_LAST_CLOSED_MS 3
+#include "timer.h"
 
 static Window *window;
 static TextLayer *timer_layer;
-static TextLayer *decis_layer;
+static TextLayer *centis_layer;
 static GFont s_timer_font;
 
-static bool paused;
-static unsigned int elapsed_ms;
-
-static time_t last_closed_s;
-static uint16_t last_closed_ms;
+static Timer timer;
 
 // Print stopwatch time to screen in format "mm:ss dc"
-static void print_time(){
-    static char text_time[] = "00:00";
-    static char decis_time[] = "0";
+static void print_time(void *data){
+    app_timer_register(POLLING_PERIOD, print_time, NULL);
+    update_time(&timer);
 
-    int printing_time = elapsed_ms;
+    static char text_time[] = "00:00";
+    static char centis_time[] = "00";
+
+    int printing_time = timer.elapsed_ms;
     int minutes = printing_time / 60000;
     printing_time -= minutes * 60000;
     int seconds = printing_time / 1000;
     printing_time -= seconds * 1000;
-    int decis = printing_time / 100;
+    int centis = printing_time / 10;
 
     snprintf(text_time, sizeof("00:00"), "%02d:%02d", minutes, seconds);
-    snprintf(decis_time, sizeof("0"), "%d", decis);
+    snprintf(centis_time, sizeof("00"), "%02d", centis);
 
     text_layer_set_text(timer_layer, text_time);
-    text_layer_set_text(decis_layer, decis_time);
+    text_layer_set_text(centis_layer, centis_time);
+}
+
+// Reset timing
+static void reset_timer(Timer *timer){
+    timer->elapsed_ms = timer->elapsed_ms_at_pause = 0;
+    time_ms(&timer->last_paused_s, &timer->last_paused_ms);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Time reset");
 }
 
 // Pause timing
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
-    paused = !paused;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Paused: %s", paused?"true":"false");
+    timer.paused = !timer.paused;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Paused: %s", timer.paused?"true":"false");
+    if(!timer.paused){
+        time_ms(&timer.last_paused_s, &timer.last_paused_ms);
+        timer.elapsed_ms_at_pause = timer.elapsed_ms;
+    }
 }
 
 // Reset the time to 0 and print the zeroed time to the screen.
 static void up_click_handler(ClickRecognizerRef recognizer, void *context){
-    elapsed_ms = 0;
-    print_time();
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Time reset");
+    reset_timer(&timer);
 }
 
 static void click_config_provider(void *context) {
@@ -80,58 +83,40 @@ static void window_load(Window *window) {
     text_layer_set_text_alignment(timer_layer, GTextAlignmentCenter);
 
 
-    decis_layer = text_layer_create((GRect){
+    centis_layer = text_layer_create((GRect){
         .origin = {0, 80},
         .size = {bounds.size.w, 50 }
     });
 
-    text_layer_set_background_color(decis_layer, GColorClear);
-    text_layer_set_font(decis_layer, s_timer_font);
-    text_layer_set_text(decis_layer, "0");
-    text_layer_set_text_alignment(decis_layer, GTextAlignmentCenter);
+    text_layer_set_background_color(centis_layer, GColorClear);
+    text_layer_set_font(centis_layer, s_timer_font);
+    text_layer_set_text(centis_layer, "00");
+    text_layer_set_text_alignment(centis_layer, GTextAlignmentCenter);
 
     // Print the time before the window is pushed onto the stack to avoid
     // seeing an empty screen
-    print_time();
+    print_time(NULL);
 
     layer_add_child(window_layer, text_layer_get_layer(timer_layer));
-    layer_add_child(window_layer, text_layer_get_layer(decis_layer));
+    layer_add_child(window_layer, text_layer_get_layer(centis_layer));
 
 }
 
 static void window_unload(Window *window) {
     text_layer_destroy(timer_layer);
-    text_layer_destroy(decis_layer);
+    text_layer_destroy(centis_layer);
 
     fonts_unload_custom_font(s_timer_font);
 }
 
-
-static void update_time(void *data){
-    app_timer_register(POLLING_PERIOD, update_time, NULL);
-    if(!paused){
-        elapsed_ms += POLLING_PERIOD;
-        print_time();
-    }
-}
-
 // Return the number of milliseconds since the app was last closed.
 static unsigned int get_closed_time(){
-    time_t current_time_s;
-    uint16_t current_time_ms;
-
-    last_closed_s = persist_read_int(KEY_LAST_CLOSED_S);
-    last_closed_ms = persist_read_int(KEY_LAST_CLOSED_MS);
-
-    time_ms(&current_time_s, &current_time_ms);
-
-    unsigned long current_time = (1000*current_time_s + current_time_ms);
-    unsigned long last_closed = (1000*last_closed_s + last_closed_ms);
+    unsigned long current_time = get_current_time_ms();
+    unsigned long last_closed = (1000*timer.last_closed_s + timer.last_closed_ms);
 
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Closed for %lums", current_time - last_closed);
 
     return current_time - last_closed;
-
 }
 
 static void init(void) {
@@ -148,31 +133,26 @@ static void init(void) {
     window_set_fullscreen(window, fullscreen);
 
     // Set up the timer, and read persistant values from memory.
-    app_timer_register(POLLING_PERIOD, update_time, NULL);
-    elapsed_ms = persist_read_int(KEY_ELAPSED_TIME);
+    app_timer_register(POLLING_PERIOD, print_time, NULL);
 
-    // Ensure that paused is true on first run of app.
-    if(persist_exists(KEY_PAUSED)) paused = persist_read_bool(KEY_PAUSED);
-    else paused = true;
+    // Ensure that timer.paused is true on first run of app.
+    if(persist_exists(KEY_TIMER)) persist_read_data(KEY_TIMER, &timer, sizeof(timer));
+    else timer.paused = true;
 
     // If the app wasn't paused when last closed...
-    if(!paused){
-        elapsed_ms += get_closed_time();
+    if(!timer.paused){
+        timer.elapsed_ms += get_closed_time();
     }
 
     window_stack_push(window, animated);
 }
 
 static void deinit(void) {
-    persist_write_int(KEY_ELAPSED_TIME, elapsed_ms);
-    persist_write_bool(KEY_PAUSED, paused);
-
     window_destroy(window);
 
     // Write out time last to reduce inaccuracy.
-    time_ms(&last_closed_s, &last_closed_ms);
-    persist_write_int(KEY_LAST_CLOSED_S, last_closed_s);
-    persist_write_int(KEY_LAST_CLOSED_MS, last_closed_ms);
+    time_ms(&timer.last_closed_s, &timer.last_closed_ms);
+    persist_write_data(KEY_TIMER, &timer, sizeof(timer));
 }
 
 int main(void) {
