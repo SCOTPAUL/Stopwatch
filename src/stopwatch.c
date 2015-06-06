@@ -8,6 +8,8 @@
 #include <pebble.h>
 #include "timer.h"
 
+#define TIME_KEY 0
+
 static Window *window;
 static TextLayer *timer_layer;
 static TextLayer *centis_layer;
@@ -59,9 +61,21 @@ static void up_click_handler(ClickRecognizerRef recognizer, void *context){
     reset_timer(&timer);
 }
 
+// Write out the current elapsed time in ms to the AppMessage outbox
+static void down_click_handler(ClickRecognizerRef recognizer, void *context){
+    const uint32_t time_ms = timer.elapsed_ms;
+
+    DictionaryIterator *iter;
+    app_message_outbox_begin(&iter);
+    dict_write_uint32(iter, TIME_KEY, time_ms);
+    dict_write_end(iter);
+    app_message_outbox_send();
+}
+
 static void click_config_provider(void *context) {
     window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
     window_single_click_subscribe(BUTTON_ID_UP, up_click_handler);
+    window_single_click_subscribe(BUTTON_ID_DOWN, down_click_handler);
 }
 
 static void window_load(Window *window) {
@@ -119,6 +133,29 @@ static unsigned int get_closed_time(){
     return current_time - last_closed;
 }
 
+static void inbox_received_callback(DictionaryIterator *iterator, void *context){
+    APP_LOG(APP_LOG_LEVEL_INFO, "Message recieved!");
+}
+
+static void inbox_dropped_callback(AppMessageResult reason, void *context){
+    APP_LOG(APP_LOG_LEVEL_ERROR, "Mesage dropped!");
+}
+
+static void outbox_failed_callback(DictionaryIterator *iterator, AppMessageResult reason, void *context){
+    APP_LOG(APP_LOG_LEVEL_ERROR, "Outbox send failed!");
+}
+
+static void outbox_sent_callback(DictionaryIterator *iterator, void *context){
+    APP_LOG(APP_LOG_LEVEL_INFO, "Outbox send success!");
+}
+
+static void register_appmessage_callbacks(){
+    app_message_register_inbox_received(inbox_received_callback);
+    app_message_register_inbox_dropped(inbox_dropped_callback);
+    app_message_register_outbox_failed(outbox_failed_callback);
+    app_message_register_outbox_sent(outbox_sent_callback);
+}
+
 static void init(void) {
     // Set up the window
     window = window_create();
@@ -131,6 +168,10 @@ static void init(void) {
     const bool fullscreen = true;
     const bool animated = true;
     window_set_fullscreen(window, fullscreen);
+
+    // Setup AppMessage
+    register_appmessage_callbacks();
+    app_message_open(app_message_inbox_size_maximum(), app_message_outbox_size_maximum());
 
     // Set up the timer, and read persistant values from memory.
     app_timer_register(POLLING_PERIOD, print_time, NULL);
