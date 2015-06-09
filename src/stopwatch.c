@@ -15,13 +15,18 @@ static TextLayer *timer_layer;
 static TextLayer *centis_layer;
 static GFont s_timer_font;
 
+static ActionBarLayer *action_bar;
+static GBitmap *s_play_icon;
+static GBitmap *s_pause_icon;
+static GBitmap *s_select_button_icon;
+static GBitmap *s_share_icon;
+static GBitmap *s_refresh_icon;
+
 static Timer timer;
 
 // Print stopwatch time to screen in format "mm:ss dc"
-static void print_time(void *data){
-    app_timer_register(POLLING_PERIOD, print_time, NULL);
+static void print_time(){
     update_time(&timer);
-
     static char text_time[] = "00:00";
     static char centis_time[] = "00";
 
@@ -39,10 +44,20 @@ static void print_time(void *data){
     text_layer_set_text(centis_layer, centis_time);
 }
 
+// Wrapper around print_time to set up printing every POLLING_PERIOD ms
+static void print_loop(void *data){
+    app_timer_register(POLLING_PERIOD, print_loop, NULL);
+
+    if(!timer.paused){
+        print_time();
+    }
+}
+
 // Reset timing
 static void reset_timer(Timer *timer){
     timer->elapsed_ms = timer->elapsed_ms_at_pause = 0;
     time_ms(&timer->last_paused_s, &timer->last_paused_ms);
+    print_time();
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Time reset");
 }
 
@@ -50,10 +65,17 @@ static void reset_timer(Timer *timer){
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
     timer.paused = !timer.paused;
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Paused: %s", timer.paused?"true":"false");
+
     if(!timer.paused){
         time_ms(&timer.last_paused_s, &timer.last_paused_ms);
         timer.elapsed_ms_at_pause = timer.elapsed_ms;
+        s_select_button_icon = s_pause_icon;
     }
+    else{
+        s_select_button_icon = s_play_icon;
+    }
+
+    action_bar_layer_set_icon(action_bar, BUTTON_ID_SELECT, s_select_button_icon);
 }
 
 // Reset the time to 0 and print the zeroed time to the screen.
@@ -84,11 +106,11 @@ static void window_load(Window *window) {
 
     timer_layer = text_layer_create((GRect) {
         .origin = { 0, 40 },
-        .size = { bounds.size.w, 50 }
+        .size = { bounds.size.w - ACTION_BAR_WIDTH, 50 }
     });
 
     s_timer_font = fonts_load_custom_font(
-        resource_get_handle(RESOURCE_ID_FONT_PERFECT_DOS_48)
+        resource_get_handle(RESOURCE_ID_FONT_PERFECT_DOS_42)
     );
 
     text_layer_set_background_color(timer_layer, GColorClear);
@@ -99,7 +121,7 @@ static void window_load(Window *window) {
 
     centis_layer = text_layer_create((GRect){
         .origin = {0, 80},
-        .size = {bounds.size.w, 50 }
+        .size = {bounds.size.w - ACTION_BAR_WIDTH, 50 }
     });
 
     text_layer_set_background_color(centis_layer, GColorClear);
@@ -107,9 +129,26 @@ static void window_load(Window *window) {
     text_layer_set_text(centis_layer, "00");
     text_layer_set_text_alignment(centis_layer, GTextAlignmentCenter);
 
+    action_bar = action_bar_layer_create();
+    action_bar_layer_add_to_window(action_bar, window);
+    action_bar_layer_set_click_config_provider(action_bar, click_config_provider);
+
+    // Load actionbar icons
+    s_play_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_PLAY);
+    s_pause_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_PAUSE);
+    s_refresh_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_REFRESH);
+    s_share_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_SHARE);
+
+    if(timer.paused) s_select_button_icon = s_play_icon;
+    else s_select_button_icon = s_pause_icon;
+
+    action_bar_layer_set_icon(action_bar, BUTTON_ID_UP, s_refresh_icon);
+    action_bar_layer_set_icon(action_bar, BUTTON_ID_SELECT, s_select_button_icon);
+    action_bar_layer_set_icon(action_bar, BUTTON_ID_DOWN, s_share_icon);
+
     // Print the time before the window is pushed onto the stack to avoid
     // seeing an empty screen
-    print_time(NULL);
+    print_time();
 
     layer_add_child(window_layer, text_layer_get_layer(timer_layer));
     layer_add_child(window_layer, text_layer_get_layer(centis_layer));
@@ -119,6 +158,13 @@ static void window_load(Window *window) {
 static void window_unload(Window *window) {
     text_layer_destroy(timer_layer);
     text_layer_destroy(centis_layer);
+
+    // Unload action bar
+    gbitmap_destroy(s_play_icon);
+    gbitmap_destroy(s_pause_icon);
+    gbitmap_destroy(s_refresh_icon);
+    gbitmap_destroy(s_share_icon);
+    action_bar_layer_destroy(action_bar);
 
     fonts_unload_custom_font(s_timer_font);
 }
@@ -175,8 +221,8 @@ static void init(void) {
     register_appmessage_callbacks();
     app_message_open(app_message_inbox_size_maximum(), app_message_outbox_size_maximum());
 
-    // Set up the timer, and read persistant values from memory.
-    app_timer_register(POLLING_PERIOD, print_time, NULL);
+    // Setup print_loop to run every POLLING_PERIOD ms
+    app_timer_register(POLLING_PERIOD, print_loop, NULL);
 
     // Ensure that timer.paused is true on first run of app.
     if(persist_exists(KEY_TIMER)) persist_read_data(KEY_TIMER, &timer, sizeof(timer));

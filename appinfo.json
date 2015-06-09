@@ -16,9 +16,35 @@
     "media": [
         {
             "type": "font",
-            "name": "FONT_PERFECT_DOS_48",
+            "name": "FONT_PERFECT_DOS_42",
             "file": "fonts/perfect-dos-vga.ttf",
             "characterRegex": "[0-9:]"
+        },
+        {
+            "type": "font",
+            "name": "FONT_PERFECT_DOS_28",
+            "file": "fonts/perfect-dos-vga.ttf",
+            "characterRegex": "[0-9:]"
+        },
+        {
+            "type": "png",
+            "name": "IMAGE_PLAY",
+            "file": "img/play.png"
+        },
+        {
+            "type": "png",
+            "name": "IMAGE_PAUSE",
+            "file": "img/pause.png"
+        },
+        {
+            "type": "png",
+            "name": "IMAGE_REFRESH",
+            "file": "img/refresh.png"
+        },
+        {
+            "type": "png",
+            "name": "IMAGE_SHARE",
+            "file": "img/share.png"
         }
     ]
   }
