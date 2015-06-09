@@ -1,5 +1,5 @@
 /*
- * Timer.c
+ * timer.c
  * Helper functions for Stopwatch
  */
 

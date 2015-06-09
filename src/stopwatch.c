@@ -1,5 +1,5 @@
 /*
- * Timer.c
+ * stopwatch.c
  * A simple stopwatch timer.
  *
  * Custom font source: http://www.dafont.com/perfect-dos-vga-437.font
@@ -143,10 +143,12 @@ static void inbox_dropped_callback(AppMessageResult reason, void *context){
 
 static void outbox_failed_callback(DictionaryIterator *iterator, AppMessageResult reason, void *context){
     APP_LOG(APP_LOG_LEVEL_ERROR, "Outbox send failed!");
+    vibes_double_pulse();
 }
 
 static void outbox_sent_callback(DictionaryIterator *iterator, void *context){
     APP_LOG(APP_LOG_LEVEL_INFO, "Outbox send success!");
+    vibes_short_pulse();
 }
 
 static void register_appmessage_callbacks(){
