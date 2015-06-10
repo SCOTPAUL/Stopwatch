@@ -24,7 +24,7 @@ static GBitmap *s_refresh_icon;
 
 static Timer timer;
 
-// Print stopwatch time to screen in format "mm:ss dc"
+// Print stopwatch time to screen in format "mm:ss cc"
 static void print_time(){
     update_time(&timer);
     static char text_time[] = "00:00";
@@ -53,14 +53,6 @@ static void print_loop(void *data){
     }
 }
 
-// Reset timing
-static void reset_timer(Timer *timer){
-    timer->elapsed_ms = timer->elapsed_ms_at_pause = 0;
-    time_ms(&timer->last_paused_s, &timer->last_paused_ms);
-    print_time();
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Time reset");
-}
-
 // Pause timing
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
     timer.paused = !timer.paused;
@@ -81,6 +73,7 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
 // Reset the time to 0 and print the zeroed time to the screen.
 static void up_click_handler(ClickRecognizerRef recognizer, void *context){
     reset_timer(&timer);
+    print_time();
 }
 
 // Write out the current elapsed time in ms to the AppMessage outbox
@@ -98,6 +91,44 @@ static void click_config_provider(void *context) {
     window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
     window_single_click_subscribe(BUTTON_ID_UP, up_click_handler);
     window_single_click_subscribe(BUTTON_ID_DOWN, down_click_handler);
+}
+
+// Only show the share icon if the phone is connected
+static void bluetooth_connection_handler(bool connected){
+    if(connected){
+        action_bar_layer_set_icon(action_bar, BUTTON_ID_DOWN, s_share_icon);
+    }
+    else{
+        action_bar_layer_clear_icon(action_bar, BUTTON_ID_DOWN);
+    }
+}
+
+// Setup the action bar on the side of the app
+static void action_bar_init(){
+    s_play_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_PLAY);
+    s_pause_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_PAUSE);
+    s_refresh_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_REFRESH);
+    s_share_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_SHARE);
+
+    if(timer.paused) s_select_button_icon = s_play_icon;
+    else s_select_button_icon = s_pause_icon;
+
+    action_bar_layer_set_icon(action_bar, BUTTON_ID_UP, s_refresh_icon);
+    action_bar_layer_set_icon(action_bar, BUTTON_ID_SELECT, s_select_button_icon);
+
+    if(bluetooth_connection_service_peek()){
+        action_bar_layer_set_icon(action_bar, BUTTON_ID_DOWN, s_share_icon);
+    }
+    bluetooth_connection_service_subscribe(bluetooth_connection_handler);
+}
+
+static void action_bar_deinit(){
+    gbitmap_destroy(s_play_icon);
+    gbitmap_destroy(s_pause_icon);
+    gbitmap_destroy(s_refresh_icon);
+    gbitmap_destroy(s_share_icon);
+    bluetooth_connection_service_unsubscribe();
+    action_bar_layer_destroy(action_bar);
 }
 
 static void window_load(Window *window) {
@@ -134,17 +165,7 @@ static void window_load(Window *window) {
     action_bar_layer_set_click_config_provider(action_bar, click_config_provider);
 
     // Load actionbar icons
-    s_play_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_PLAY);
-    s_pause_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_PAUSE);
-    s_refresh_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_REFRESH);
-    s_share_icon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_SHARE);
-
-    if(timer.paused) s_select_button_icon = s_play_icon;
-    else s_select_button_icon = s_pause_icon;
-
-    action_bar_layer_set_icon(action_bar, BUTTON_ID_UP, s_refresh_icon);
-    action_bar_layer_set_icon(action_bar, BUTTON_ID_SELECT, s_select_button_icon);
-    action_bar_layer_set_icon(action_bar, BUTTON_ID_DOWN, s_share_icon);
+    action_bar_init();
 
     // Print the time before the window is pushed onto the stack to avoid
     // seeing an empty screen
@@ -160,23 +181,8 @@ static void window_unload(Window *window) {
     text_layer_destroy(centis_layer);
 
     // Unload action bar
-    gbitmap_destroy(s_play_icon);
-    gbitmap_destroy(s_pause_icon);
-    gbitmap_destroy(s_refresh_icon);
-    gbitmap_destroy(s_share_icon);
-    action_bar_layer_destroy(action_bar);
-
+    action_bar_deinit();
     fonts_unload_custom_font(s_timer_font);
-}
-
-// Return the number of milliseconds since the app was last closed.
-static unsigned int get_closed_time(){
-    unsigned long current_time = get_current_time_ms();
-    unsigned long last_closed = (1000*timer.last_closed_s + timer.last_closed_ms);
-
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Closed for %lums", current_time - last_closed);
-
-    return current_time - last_closed;
 }
 
 static void inbox_received_callback(DictionaryIterator *iterator, void *context){
@@ -213,9 +219,14 @@ static void init(void) {
         .unload = window_unload,
     });
 
-    const bool fullscreen = true;
     const bool animated = true;
-    window_set_fullscreen(window, fullscreen);
+
+    // Set the window fullscreen if on aplite
+    // (basalt windows are fullscreen by default)
+    #ifdef PBL_PLATFORM_APLITE
+        const bool fullscreen = true;
+        window_set_fullscreen(window, fullscreen);
+    #endif
 
     // Setup AppMessage
     register_appmessage_callbacks();
@@ -230,7 +241,7 @@ static void init(void) {
 
     // If the app wasn't paused when last closed...
     if(!timer.paused){
-        timer.elapsed_ms += get_closed_time();
+        timer.elapsed_ms += get_closed_time(&timer);
     }
 
     window_stack_push(window, animated);

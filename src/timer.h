@@ -17,7 +17,9 @@ typedef struct Timer {
 } Timer;
 
 unsigned int get_current_time_ms();
+unsigned int get_closed_time(Timer *timer);
 unsigned int time_since_last_pause_ms(Timer *timer);
+void reset_timer(Timer *timer);
 void update_time(Timer *timer);
 
 #endif
